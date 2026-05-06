@@ -15,11 +15,11 @@ async fn play_pause(conn: &Connection, command: Command) -> zbus::Result<()> {
     match result {
         Ok(_) => {
             println!("{} OK", command.as_method());
-            return Ok(());
+            Ok(())
         }
         Err(e) => {
             println!("{} failed: {e}", command.as_method());
-            return Err(e);
+            Err(e)
         }
     }
 }
