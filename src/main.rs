@@ -8,11 +8,13 @@ mod spotify;
 async fn main() -> zbus::Result<()> {
     let conn = Connection::session().await?;
     let spotfy = SpotifyPlayerProxy::new(&conn).await?;
-    let st = spotfy.playback_status().await.unwrap();
-    spotfy.play().await.unwrap();
-    sleep(Duration::from_millis(20)).await;
-    let sta = spotfy.playback_status().await.unwrap();
-    println!("{st}\n{sta}");
+
+    if let Err(e) = spotfy.playback_status().await {
+        print!("Error: {e}");
+    }
+    if let Err(e) = spotfy.play().await {
+        eprintln!("Error: {e}");
+    }
 
     Ok(())
 }
