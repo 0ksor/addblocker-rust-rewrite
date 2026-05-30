@@ -7,24 +7,48 @@ mod spotify;
 #[tokio::main]
 async fn main() -> zbus::Result<()> {
     let conn = Connection::session().await?;
-    let spotfy = SpotifyPlayerProxy::new(&conn).await?;
-    loop {
-        let artist = get_artist(&spotfy).await?;
-        println!("{artist}");
-        sleep(Duration::from_secs(2)).await;
+    let spotify = SpotifyPlayerProxy::new(&conn).await?;
+    log(&spotify).await;
+    Ok(())
+}
+
+enum Data {
+    Artist,
+    Album,
+    Title,
+}
+impl Data {
+    fn turn(&self) -> String {
+        match self {
+            Data::Artist => "xesam:artist".to_string(),
+            Data::Album => "xesam:album".to_string(),
+            Data::Title => "xesam:title".to_string(),
+        }
     }
 }
 
-async fn get_artist(spotify: &SpotifyPlayerProxy<'_>) -> zbus::Result<String> {
-    match spotify.playback_status().await {
-        Err(e) => {
-            eprintln!("Error: {e}");
-            return Err(e);
+async fn get_metadata(spotify: &SpotifyPlayerProxy<'_>, data: Data) -> String {
+    let key = data.turn();
+    let mut metadata = spotify.metadata().await.unwrap();
+    match data {
+        Data::Artist => {
+            let artists: Vec<String> = metadata.remove(&key).unwrap().try_into().unwrap();
+            artists.into_iter().next().unwrap_or_default()
         }
-        Ok(s) => println!("{s}"),
+        Data::Album => {
+            let album: String = metadata.remove(&key).unwrap().try_into().unwrap();
+            album
+        }
+        Data::Title => {
+            let title: String = metadata.remove(&key).unwrap().try_into().unwrap();
+            title
+        }
     }
+}
 
-    let mut a = spotify.metadata().await?;
-    let artists: Vec<String> = a.remove("xesam:artist").unwrap().try_into().unwrap();
-    Ok(artists.into_iter().next().unwrap())
+async fn log(spotify: &SpotifyPlayerProxy<'_>) {
+    let artist = get_metadata(spotify, Data::Artist).await;
+    let title = get_metadata(spotify, Data::Title).await;
+    let album = get_metadata(spotify, Data::Album).await;
+    println!("artist: {artist}\n Album: {album}\n title: {title}");
 }
