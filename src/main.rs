@@ -33,7 +33,7 @@ async fn get_metadata(spotify: &SpotifyPlayerProxy<'_>, data: Data) -> String {
     match data {
         Data::Artist => {
             let artists: Vec<String> = metadata.remove(&key).unwrap().try_into().unwrap();
-            artists.into_iter().next().unwrap_or_default()
+            artists.join("")
         }
         Data::Album => {
             let album: String = metadata.remove(&key).unwrap().try_into().unwrap();
