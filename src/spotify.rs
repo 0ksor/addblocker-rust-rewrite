@@ -20,3 +20,14 @@ trait SpotifyPlayer {
         &self,
     ) -> zbus::Result<std::collections::HashMap<String, zbus::zvariant::OwnedValue>>;
 }
+#[proxy(
+    interface = "org.mpris.MediaPlayer2",
+    default_service = "org.mpris.MediaPlayer2.spotify",
+    default_path = "/org/mpris/MediaPlayer2"
+)]
+trait SpotifyRoot {
+    fn quit(&self) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn can_quit(&self) -> zbus::Result<bool>;
+}

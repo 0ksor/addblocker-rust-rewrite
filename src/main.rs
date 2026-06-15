@@ -1,54 +1,43 @@
+use std::process::Command;
 use tokio::time::{Duration, sleep};
 use zbus::Connection;
 
-use spotify::SpotifyPlayerProxy;
 mod spotify;
+use spotify::SpotifyPlayerProxy;
+use spotify::SpotifyRootProxy;
 
 #[tokio::main]
 async fn main() -> zbus::Result<()> {
+    Command::new("spotify").spawn().ok();
+    sleep(Duration::from_secs(4)).await;
+
     let conn = Connection::session().await?;
-    let spotify = SpotifyPlayerProxy::new(&conn).await?;
-    log(&spotify).await;
-    Ok(())
-}
-
-enum Data {
-    Artist,
-    Album,
-    Title,
-}
-impl Data {
-    fn turn(&self) -> String {
-        match self {
-            Data::Artist => "xesam:artist".to_string(),
-            Data::Album => "xesam:album".to_string(),
-            Data::Title => "xesam:title".to_string(),
+    // wait until spotify launches
+    // then create the proxys
+    let (spotify, root) = loop {
+        if let Ok(s) = SpotifyPlayerProxy::new(&conn).await {
+            let root = SpotifyRootProxy::new(&conn).await?;
+            break (s, root);
+        } else {
+            sleep(Duration::from_millis(200)).await;
         }
-    }
-}
-
-async fn get_metadata(spotify: &SpotifyPlayerProxy<'_>, data: Data) -> String {
-    let key = data.turn();
-    let mut metadata = spotify.metadata().await.unwrap();
-    match data {
-        Data::Artist => {
-            let artists: Vec<String> = metadata.remove(&key).unwrap().try_into().unwrap();
-            artists.join("")
-        }
-        Data::Album => {
-            let album: String = metadata.remove(&key).unwrap().try_into().unwrap();
-            album
-        }
-        Data::Title => {
-            let title: String = metadata.remove(&key).unwrap().try_into().unwrap();
-            title
-        }
+    };
+    loop {
+        log(&spotify).await;
+        sleep(Duration::from_secs(4)).await;
+        root.quit().await?;
     }
 }
 
 async fn log(spotify: &SpotifyPlayerProxy<'_>) {
-    let artist = get_metadata(spotify, Data::Artist).await;
-    let title = get_metadata(spotify, Data::Title).await;
-    let album = get_metadata(spotify, Data::Album).await;
-    println!("artist: {artist}\n Album: {album}\n title: {title}");
+    let mut meta = spotify.metadata().await.unwrap();
+    let artists: Vec<String> = meta.remove("xesam:artist").unwrap().try_into().unwrap();
+    let album: String = meta.remove("xesam:album").unwrap().try_into().unwrap();
+    let title: String = meta.remove("xesam:title").unwrap().try_into().unwrap();
+    println!(
+        "artist: {}\n Album: {}\n title: {}",
+        artists.join(""),
+        album,
+        title,
+    );
 }
