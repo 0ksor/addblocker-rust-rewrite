@@ -33,15 +33,28 @@ async fn main() -> zbus::Result<()> {
 
     loop {
         poll_fn(|cx| changes.as_mut().poll_next(cx)).await;
-        log(&spotify).await;
+        if !is_artist_empty(&spotify).await {
+            log(&spotify).await;
+        } else {
+            println!("artist is empty");
+            let _ = spotify.pause().await;
+        }
     }
+}
+
+async fn is_artist_empty(spotify: &SpotifyPlayerProxy<'_>) -> bool {
+    let mut meta = spotify.metadata().await.unwrap();
+    let artists: Vec<String> = meta.remove("xesam:artist").unwrap().try_into().unwrap();
+    // spotify dbus implemantation has a bug. It always retuns 1 artst even when there are multiple
+    let artist = artists.join("");
+    artist.is_empty()
 }
 
 async fn log(spotify: &SpotifyPlayerProxy<'_>) {
     let mut meta = spotify.metadata().await.unwrap();
     let artists: Vec<String> = meta.remove("xesam:artist").unwrap().try_into().unwrap();
-    let album: String = meta.remove("xesam:album").unwrap().try_into().unwrap();
     let title: String = meta.remove("xesam:title").unwrap().try_into().unwrap();
+    let album: String = meta.remove("xesam:album").unwrap().try_into().unwrap();
     println!(
         "artist: {}\n Album: {}\n title: {}\n",
         artists.join(""),
