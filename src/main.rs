@@ -10,39 +10,51 @@ use zbus::Connection;
 mod spotify;
 use spotify::SpotifyPlayerProxy;
 use spotify::SpotifyRootProxy;
+use zbus::names::BusName;
 
 #[tokio::main]
 async fn main() -> zbus::Result<()> {
+    let conn = Connection::session().await.unwrap();
+    let (mut spotify, mut root) = launch_spotify(&conn).await;
+    try_play(&spotify).await;
+    log(&spotify).await;
+    let mut changes = pin!(spotify.receive_metadata_changed().await);
+
+    loop {
+        poll_fn(|cx| changes.as_mut().poll_next(cx)).await;
+        log(&spotify).await;
+        if is_artist_empty(&spotify).await {
+            println!("artist is empty");
+            let _ = root.quit().await;
+            wait_spotify_dead(&conn).await;
+            (spotify, root) = launch_spotify(&conn).await;
+            try_play(&spotify).await;
+        }
+    }
+}
+
+async fn launch_spotify(
+    conn: &Connection,
+) -> (SpotifyPlayerProxy<'static>, SpotifyRootProxy<'static>) {
     Command::new("spotify")
         .stderr(Stdio::null())
         .stdout(Stdio::null())
         .spawn()
         .ok();
-    let conn = Connection::session().await?;
     // wait until spotify launches
     // then create the proxys
     let (spotify, root) = loop {
-        if let Ok(s) = SpotifyPlayerProxy::new(&conn).await
-            && let Ok(r) = SpotifyRootProxy::new(&conn).await
+        if let Ok(s) = SpotifyPlayerProxy::new(conn).await
+            && let Ok(r) = SpotifyRootProxy::new(conn).await
         {
             break (s, r);
         }
         sleep(Duration::from_millis(200)).await;
     };
-    let mut changes = pin!(spotify.receive_metadata_changed().await);
-
-    loop {
-        poll_fn(|cx| changes.as_mut().poll_next(cx)).await;
-        if !is_artist_empty(&spotify).await {
-            log(&spotify).await;
-        } else {
-            println!("artist is empty");
-            let _ = spotify.pause().await;
-        }
-    }
+    (spotify, root)
 }
 
-async fn is_artist_empty(spotify: &SpotifyPlayerProxy<'_>) -> bool {
+async fn is_artist_empty(spotify: &SpotifyPlayerProxy<'static>) -> bool {
     let mut meta = spotify.metadata().await.unwrap();
     let artists: Vec<String> = meta.remove("xesam:artist").unwrap().try_into().unwrap();
     // spotify dbus implemantation has a bug. It always retuns 1 artst even when there are multiple
@@ -50,7 +62,7 @@ async fn is_artist_empty(spotify: &SpotifyPlayerProxy<'_>) -> bool {
     artist.is_empty()
 }
 
-async fn log(spotify: &SpotifyPlayerProxy<'_>) {
+async fn log(spotify: &SpotifyPlayerProxy<'static>) {
     let mut meta = spotify.metadata().await.unwrap();
     let artists: Vec<String> = meta.remove("xesam:artist").unwrap().try_into().unwrap();
     let title: String = meta.remove("xesam:title").unwrap().try_into().unwrap();
@@ -61,4 +73,28 @@ async fn log(spotify: &SpotifyPlayerProxy<'_>) {
         album,
         title,
     );
+}
+
+async fn try_play(spotify: &SpotifyPlayerProxy<'static>) {
+    loop {
+        if spotify.play().await.is_ok()
+            && spotify.playback_status().await.as_deref() == Ok("Playing")
+        {
+            println!("broken");
+            break;
+        }
+        sleep(Duration::from_millis(200)).await;
+    }
+}
+
+async fn wait_spotify_dead(conn: &Connection) {
+    while zbus::fdo::DBusProxy::new(conn)
+        .await
+        .unwrap()
+        .name_has_owner(BusName::from_static_str("org.mpris.MediaPlayer2.spotify").unwrap())
+        .await
+        .unwrap()
+    {
+        sleep(Duration::from_millis(200)).await;
+    }
 }

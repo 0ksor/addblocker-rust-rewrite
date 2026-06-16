@@ -26,6 +26,7 @@ trait SpotifyPlayer {
     default_path = "/org/mpris/MediaPlayer2"
 )]
 trait SpotifyRoot {
+    fn raise(&self) -> zbus::Result<()>;
     fn quit(&self) -> zbus::Result<()>;
 
     #[zbus(property)]
