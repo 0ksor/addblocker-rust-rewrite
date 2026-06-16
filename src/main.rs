@@ -11,26 +11,30 @@ mod spotify;
 use spotify::SpotifyPlayerProxy;
 use spotify::SpotifyRootProxy;
 use zbus::names::BusName;
+type Metadata = std::collections::HashMap<String, zbus::zvariant::OwnedValue>;
 
 #[tokio::main]
 async fn main() -> zbus::Result<()> {
     let conn = Connection::session().await.unwrap();
     let (mut spotify, mut root) = launch_spotify(&conn).await;
     try_play(&spotify).await;
-    log(&spotify).await;
     let mut changes = pin!(spotify.receive_metadata_changed().await);
 
     loop {
-        poll_fn(|cx| changes.as_mut().poll_next(cx)).await;
-        log(&spotify).await;
-        if is_artist_empty(&spotify).await {
+        let mut meta = poll_fn(|cx| changes.as_mut().poll_next(cx))
+            .await
+            .unwrap()
+            .get()
+            .await
+            .unwrap();
+        log(&mut meta).await;
+        if is_artist_empty(&mut meta).await {
             println!("artist is empty");
             let _ = root.quit().await;
             wait_spotify_dead(&conn).await;
             // NOTE: This code works without this reassingment.
-
-            // my guess is zbus is using names insted of ids to seperate busses,
-            // but I am reassinging just in case somethig failes.
+            // my guess is zbus is using names insted of ids to tell apart busses,
+            // but I am reassigning just in case something failes.
             (spotify, root) = launch_spotify(&conn).await; // we reassign the streams to the newly created ones.
             try_play(&spotify).await;
         }
@@ -58,19 +62,31 @@ async fn launch_spotify(
     (spotify, root)
 }
 
-async fn is_artist_empty(spotify: &SpotifyPlayerProxy<'static>) -> bool {
-    let mut meta = spotify.metadata().await.unwrap();
-    let artists: Vec<String> = meta.remove("xesam:artist").unwrap().try_into().unwrap();
-    // spotify dbus implemantation has a bug. It always retuns 1 artst even when there are multiple
+async fn is_artist_empty(meta: &mut Metadata) -> bool {
+    // Get a reference, clone it via try_clone, and unwrap (since we know it's cloneable)
+    let artists = meta
+        .get("xesam:artist")
+        .unwrap()
+        .try_clone()
+        .expect("artist value should be cloneable");
+
+    let artists: Vec<String> = artists.try_into().unwrap();
+    // there is a bug in dbus implemantation of Spotify,
+    // it returns only one artist even when there are multiple.
     let artist = artists.join("");
     artist.is_empty()
 }
 
-async fn log(spotify: &SpotifyPlayerProxy<'static>) {
-    let mut meta = spotify.metadata().await.unwrap();
-    let artists: Vec<String> = meta.remove("xesam:artist").unwrap().try_into().unwrap();
-    let title: String = meta.remove("xesam:title").unwrap().try_into().unwrap();
-    let album: String = meta.remove("xesam:album").unwrap().try_into().unwrap();
+async fn log(meta: &mut Metadata) {
+    let artists = meta
+        .get("xesam:artist")
+        .unwrap()
+        .try_clone()
+        .expect("artist value should be cloneable");
+
+    let artists: Vec<String> = artists.try_into().unwrap();
+    let title: String = meta.get("xesam:title").unwrap().to_string();
+    let album: String = meta.get("xesam:album").unwrap().to_string();
     println!(
         "artist: {}\n Album: {}\n title: {}\n",
         artists.join(""),
@@ -84,7 +100,6 @@ async fn try_play(spotify: &SpotifyPlayerProxy<'static>) {
         if spotify.play().await.is_ok()
             && spotify.playback_status().await.as_deref() == Ok("Playing")
         {
-            println!("broken");
             break;
         }
         sleep(Duration::from_millis(200)).await;
