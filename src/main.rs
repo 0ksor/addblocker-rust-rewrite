@@ -27,7 +27,11 @@ async fn main() -> zbus::Result<()> {
             println!("artist is empty");
             let _ = root.quit().await;
             wait_spotify_dead(&conn).await;
-            (spotify, root) = launch_spotify(&conn).await;
+            // NOTE: This code works without this reassingment.
+
+            // my guess is zbus is using names insted of ids to seperate busses,
+            // but I am reassinging just in case somethig failes.
+            (spotify, root) = launch_spotify(&conn).await; // we reassign the streams to the newly created ones.
             try_play(&spotify).await;
         }
     }
