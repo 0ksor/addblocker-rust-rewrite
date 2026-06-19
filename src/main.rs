@@ -13,8 +13,24 @@ use spotify::SpotifyRootProxy;
 use zbus::names::BusName;
 type Metadata = std::collections::HashMap<String, zbus::zvariant::OwnedValue>;
 
+struct Counter {
+    count: u64,
+}
+impl Counter {
+    fn new() -> Self {
+        let count = 0;
+        Self { count }
+    }
+
+    fn count(&mut self) {
+        self.count += 1;
+        println!("\n{} ads has been skiped\n", self.count);
+    }
+}
+
 #[tokio::main]
 async fn main() -> zbus::Result<()> {
+    let mut counter = Counter::new();
     let conn = Connection::session().await.unwrap();
     let (mut spotify, mut root) = launch_spotify(&conn).await;
     let mut changes = pin!(spotify.receive_metadata_changed().await);
@@ -29,7 +45,7 @@ async fn main() -> zbus::Result<()> {
             .unwrap();
         log(&meta);
         if is_artist_empty(&meta) {
-            println!("artist is empty");
+            counter.count();
             let _ = root.quit().await;
             wait_spotify_dead(&conn).await;
             // NOTE: This code works without this reassingment.
