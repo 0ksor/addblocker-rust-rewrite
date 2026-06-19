@@ -87,12 +87,14 @@ fn log(meta: &Metadata) {
     let artists: Vec<String> = artists.try_into().unwrap();
     let title: String = meta.get("xesam:title").unwrap().to_string();
     let album: String = meta.get("xesam:album").unwrap().to_string();
-    println!(
-        "artist: {}\n Album: {}\n title: {}\n",
-        artists.join(""),
-        album,
-        title,
-    );
+    if !is_artist_empty(meta) {
+        println!(
+            "artist: {}\n Album: {}\n title: {}\n",
+            artists.join(""),
+            album,
+            title,
+        );
+    }
 }
 
 async fn wait_spotify_dead(conn: &Connection) {
