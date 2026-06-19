@@ -17,6 +17,7 @@ type Metadata = std::collections::HashMap<String, zbus::zvariant::OwnedValue>;
 async fn main() -> zbus::Result<()> {
     let conn = Connection::session().await.unwrap();
     let (mut spotify, mut root) = launch_spotify(&conn).await;
+    sleep(Duration::from_secs(1)).await;
     // try_play(&spotify).await;
     let mut changes = pin!(spotify.receive_metadata_changed().await);
 
@@ -27,8 +28,8 @@ async fn main() -> zbus::Result<()> {
             .get()
             .await
             .unwrap();
-        log(&mut meta).await;
-        if is_artist_empty(&mut meta).await {
+        log(&mut meta);
+        if is_artist_empty(&mut meta) {
             println!("artist is empty");
             let _ = root.quit().await;
             wait_spotify_dead(&conn).await;
@@ -36,7 +37,7 @@ async fn main() -> zbus::Result<()> {
             // my guess is zbus is using names insted of ids to tell apart busses,
             // but I am reassigning just in case something failes.
             (spotify, root) = launch_spotify(&conn).await; // we reassign the streams to the newly created ones.
-            try_play(&spotify).await;
+            let _ = spotify.play().await.is_ok();
         }
     }
 }
@@ -53,16 +54,16 @@ async fn launch_spotify(
     let (spotify, root) = loop {
         if let Ok(s) = SpotifyPlayerProxy::new(conn).await
             && let Ok(r) = SpotifyRootProxy::new(conn).await
+            && s.playback_status().await.is_ok()
         {
             break (s, r);
         }
         sleep(Duration::from_millis(200)).await;
     };
-    sleep(Duration::from_millis(500)).await;
     (spotify, root)
 }
 
-async fn is_artist_empty(meta: &mut Metadata) -> bool {
+fn is_artist_empty(meta: &mut Metadata) -> bool {
     // Get a reference, clone it via try_clone, and unwrap (since we know it's cloneable)
     let artists = meta
         .get("xesam:artist")
@@ -77,7 +78,7 @@ async fn is_artist_empty(meta: &mut Metadata) -> bool {
     artist.is_empty()
 }
 
-async fn log(meta: &mut Metadata) {
+fn log(meta: &mut Metadata) {
     let artists = meta
         .get("xesam:artist")
         .unwrap()
@@ -93,17 +94,6 @@ async fn log(meta: &mut Metadata) {
         album,
         title,
     );
-}
-
-async fn try_play(spotify: &SpotifyPlayerProxy<'static>) {
-    loop {
-        if spotify.play().await.is_ok()
-            && spotify.playback_status().await.as_deref() == Ok("Playing")
-        {
-            break;
-        }
-        sleep(Duration::from_millis(200)).await;
-    }
 }
 
 async fn wait_spotify_dead(conn: &Connection) {

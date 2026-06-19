@@ -16,6 +16,9 @@ trait SpotifyPlayer {
     fn playback_status(&self) -> zbus::Result<String>;
 
     #[zbus(property)]
+    fn can_play(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
     fn metadata(
         &self,
     ) -> zbus::Result<std::collections::HashMap<String, zbus::zvariant::OwnedValue>>;
