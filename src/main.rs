@@ -44,11 +44,10 @@ async fn main() -> zbus::Result<()> {
 async fn launch_spotify(
     conn: &Connection,
 ) -> (SpotifyPlayerProxy<'static>, SpotifyRootProxy<'static>) {
-    Command::new("spotify")
+    let _ = Command::new("spotify")
         .stderr(Stdio::null())
         .stdout(Stdio::null())
-        .spawn()
-        .ok();
+        .spawn();
     // wait until spotify launches
     // then create the proxys
     let (spotify, root) = loop {
@@ -59,6 +58,7 @@ async fn launch_spotify(
         }
         sleep(Duration::from_millis(200)).await;
     };
+    sleep(Duration::from_millis(500)).await;
     (spotify, root)
 }
 
