@@ -17,9 +17,8 @@ type Metadata = std::collections::HashMap<String, zbus::zvariant::OwnedValue>;
 async fn main() -> zbus::Result<()> {
     let conn = Connection::session().await.unwrap();
     let (mut spotify, mut root) = launch_spotify(&conn).await;
-    sleep(Duration::from_secs(1)).await;
-    // try_play(&spotify).await;
     let mut changes = pin!(spotify.receive_metadata_changed().await);
+    log(&spotify.metadata().await.unwrap());
 
     loop {
         let meta = poll_fn(|cx| changes.as_mut().poll_next(cx))
