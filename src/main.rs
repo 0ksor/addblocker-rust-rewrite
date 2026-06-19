@@ -22,14 +22,14 @@ async fn main() -> zbus::Result<()> {
     let mut changes = pin!(spotify.receive_metadata_changed().await);
 
     loop {
-        let mut meta = poll_fn(|cx| changes.as_mut().poll_next(cx))
+        let meta = poll_fn(|cx| changes.as_mut().poll_next(cx))
             .await
             .unwrap()
             .get()
             .await
             .unwrap();
-        log(&mut meta);
-        if is_artist_empty(&mut meta) {
+        log(&meta);
+        if is_artist_empty(&meta) {
             println!("artist is empty");
             let _ = root.quit().await;
             wait_spotify_dead(&conn).await;
@@ -63,7 +63,7 @@ async fn launch_spotify(
     (spotify, root)
 }
 
-fn is_artist_empty(meta: &mut Metadata) -> bool {
+fn is_artist_empty(meta: &Metadata) -> bool {
     // Get a reference, clone it via try_clone, and unwrap (since we know it's cloneable)
     let artists = meta
         .get("xesam:artist")
@@ -78,7 +78,7 @@ fn is_artist_empty(meta: &mut Metadata) -> bool {
     artist.is_empty()
 }
 
-fn log(meta: &mut Metadata) {
+fn log(meta: &Metadata) {
     let artists = meta
         .get("xesam:artist")
         .unwrap()
