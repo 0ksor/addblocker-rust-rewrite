@@ -2,6 +2,8 @@ use std::future::poll_fn;
 use std::pin::pin;
 use std::process::Command;
 use std::process::Stdio;
+use std::process::exit;
+use std::sync::OnceLock;
 
 use futures_core::stream::Stream;
 use tokio::time::{Duration, sleep};
@@ -12,6 +14,7 @@ use spotify::SpotifyPlayerProxy;
 use spotify::SpotifyRootProxy;
 use zbus::names::BusName;
 type Metadata = std::collections::HashMap<String, zbus::zvariant::OwnedValue>;
+static SPOTIFY_CMD: OnceLock<String> = OnceLock::new();
 
 struct Counter {
     count: u64,
@@ -30,6 +33,7 @@ impl Counter {
 
 #[tokio::main]
 async fn main() -> zbus::Result<()> {
+    check_spotify();
     let mut counter = Counter::new();
     let conn = Connection::session().await.unwrap();
     let (mut spotify, mut root) = launch_spotify(&conn).await;
@@ -60,7 +64,7 @@ async fn main() -> zbus::Result<()> {
 async fn launch_spotify(
     conn: &Connection,
 ) -> (SpotifyPlayerProxy<'static>, SpotifyRootProxy<'static>) {
-    let _ = Command::new("spotify")
+    let _ = Command::new(SPOTIFY_CMD.get().unwrap())
         .stderr(Stdio::null())
         .stdout(Stdio::null())
         .spawn();
@@ -123,4 +127,23 @@ async fn wait_spotify_dead(conn: &Connection) {
     {
         sleep(Duration::from_millis(200)).await;
     }
+}
+
+fn has_cmd(name: &str) -> bool {
+    Command::new("which")
+        .arg(name)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn check_spotify() {
+    let cmd = ["spotify-launcher", "spotify"]
+        .into_iter()
+        .find(|c| has_cmd(c))
+        .unwrap_or_else(|| {
+            eprintln!("ERROR: spotify not found");
+            exit(1);
+        });
+    SPOTIFY_CMD.set(cmd.to_string()).ok();
 }
